@@ -1,16 +1,15 @@
 # Noteable Exemplars
 
-This repository contains an expandable collection of exemplar notebooks, guidance materials, and reusable teaching examples for Noteable.
+This repository contains an expandable collection of exemplar notebooks, guidance materials, and reusable teaching examples for Noteable. 
 
-The initial materials were developed during Summer 2026, but this repository is intended to grow over time as new examples, disciplines, workflows, and teaching patterns are identified.
+The initial materials were developed during Summer 2026, and this repository is intended to grow over time as new examples, disciplines, workflows, and teaching patterns are identified.
 
-## Repository structure [DRAFT]
+## Repository structure
 
+- `assets/` — shared images, datasets, and other supporting files.
 - `exemplars/` — subject, workflow, or use-case based exemplar notebooks.
 - `guidance/` — notebooks and supporting material explaining how to use Noteable effectively.
 - `templates/` — reusable notebook and documentation templates for future contributions.
-- `assets/` — shared images, datasets, and other supporting files.
-- `metadata/` — index files used to describe and organise exemplars.
 
 ## Adding new exemplars
 
