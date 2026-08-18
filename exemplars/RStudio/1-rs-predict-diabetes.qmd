@@ -1,0 +1,567 @@
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20NB%20Header%20Banner.png)
+
+## Exemplar Information
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Purpose:** This exemplar demonstrates a complete, modern R workflow for applied data analytics: loading data, cleaning variables, exploring patterns, fitting predictive models, evaluating performance, and communicating findings clearly.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Intended Audience / Teaching Context:** Undergraduate students and teaching teams working in statistics, data science, health analytics, or quantitative social science who want a practical and visually polished RStudio showcase.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Noteable Requirements:**
+
+**Environment:** \[LIVE 2026/2027\]
+
+**Server:** R Studio
+
+**Kernel:** R
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Required data or dependencies:**
+
+-   Dataset package: `NHANES`
+-   R packages: `tidyverse`, `ggplot2`, `gt`, `caret`, `glmnet`, `GGally`, `viridis`
+-   Standard capabilities: base R modelling, factors, summary tools
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+**Date created / last reviewed:** 17 August 2026
+
+**Maintainer / Owner:** Nik Yusuf
+:::
+
+# Predicting Diabetes Risk with a Modern R Workflow
+
+## Legend
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+In **blue**, the **instructions** and **goals** are highlighted. This tells you what we are trying to achieve.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+In **green**, key **information** and **concept explanations** are highlighted.
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+In **yellow**, **exercises** and **tasks** are highlighted for you to try yourself.
+:::
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+In **red**, **error interpretation** and **debugging tips** are highlighted.
+:::
+
+## 1. Why this project matters
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Build one coherent, end-to-end analytics workflow in R that moves from raw data to actionable insight.
+:::
+
+In this exemplar, we will work with health survey data and ask a practical question:
+
+**Can we predict whether someone has diabetes using a small set of routinely observed characteristics?**
+
+This is a strong teaching example because it brings together:
+
+-   tidy data handling
+-   clear exploratory data analysis
+-   a meaningful modelling task
+-   model comparison
+-   plain-language interpretation
+-   polished visual and tabular communication
+
+We will use the `NHANES` dataset package, which provides lightweight health data that is ideal for classroom use.
+
+## 2. Setting up our toolkit
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Load the packages we need. Run this chunk first so the rest of the document works smoothly.
+:::
+
+```{r}
+cat("Starting setup: loading R packages...\n")
+
+library(tidyverse)
+library(ggplot2)
+library(gt)
+library(caret)
+library(glmnet)
+library(GGally)
+library(viridis)
+library(NHANES)
+
+cat("Success! Packages loaded. You are ready to begin.\n")
+```
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+We are using a deliberately focused toolkit here. `tidyverse` supports the data workflow, `ggplot2` and `viridis` help us communicate visually, `caret` provides model training and evaluation infrastructure, `glmnet` gives us regularised regression, and `gt` helps us present results professionally.
+:::
+
+## 3. Loading the data
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Load a reliable teaching dataset with health, demographic, and behavioural variables.
+:::
+
+```{r}
+cat("Loading NHANES data...\n")
+
+data("NHANES")
+
+nhanes_raw <- NHANES
+
+cat("Data loaded successfully!\n")
+cat("Rows:", nrow(nhanes_raw), "\n")
+cat("Columns:", ncol(nhanes_raw), "\n")
+```
+
+Let us preview the data.
+
+```{r}
+nhanes_raw %>% 
+  select(Diabetes, Age, Gender, BMI, PhysActive, Race1, SleepHrsNight) %>% 
+  head(10)
+```
+
+## 4. Framing the analysis question
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+**Analytical task:** We will predict `Diabetes` as a binary outcome using demographic and health-related predictors.
+:::
+
+To keep the workflow beginner-friendly and robust, we will focus on a compact modelling dataset using variables that are easy to explain:
+
+-   `Age`
+-   `Gender`
+-   `BMI`
+-   `PhysActive`
+-   `Race1`
+-   `SleepHrsNight`
+
+Our outcome will be whether diabetes is reported as **Yes** or **No**.
+
+## 5. Cleaning and preparing the data
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Build a clean analysis-ready dataset. This is one of the most important parts of real data science.
+:::
+
+```{r}
+cat("Cleaning and preparing variables...\n")
+
+nhanes_model <- nhanes_raw %>%
+  transmute(
+    Diabetes = factor(Diabetes),
+    Age = Age,
+    Gender = factor(Gender),
+    BMI = BMI,
+    PhysActive = factor(PhysActive),
+    Race1 = factor(Race1),
+    SleepHrsNight = SleepHrsNight
+  ) %>%
+  filter(Diabetes %in% c("Yes", "No")) %>%
+  drop_na()
+
+nhanes_model <- nhanes_model %>%
+  mutate(
+    Diabetes = factor(Diabetes, levels = c("No", "Yes")),
+    PhysActive = fct_drop(PhysActive),
+    Gender = fct_drop(Gender),
+    Race1 = fct_drop(Race1)
+  )
+
+cat("Cleaning complete.\n")
+cat("Rows remaining after filtering:", nrow(nhanes_model), "\n")
+```
+
+Now let us inspect the cleaned data.
+
+```{r}
+glimpse(nhanes_model)
+```
+
+A quick class balance check is also useful.
+
+```{r}
+nhanes_model %>% count(Diabetes)
+```
+
+::: {style="border:1px solid #ffeeba; background:#fff3cd; color:#856404; padding:16px; margin:8px 0; border-radius:4px;"}
+**Exercise:** Try adding another predictor from the NHANES dataset later, such as blood pressure or alcohol use, and see whether it improves the model.
+:::
+
+## 6. First exploration: what do the variables look like?
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Explore the shape of the data before modelling. Good models start with good questions and careful visual checks.
+:::
+
+### Outcome balance
+
+```{r}
+ggplot(nhanes_model, aes(x = Diabetes, fill = Diabetes)) +
+  geom_bar(width = 0.7, show.legend = FALSE) +
+  scale_fill_viridis_d(option = "D", end = 0.85) +
+  labs(
+    title = "Class balance for diabetes outcome",
+    subtitle = "Most participants report no diabetes, so accuracy alone will not be enough",
+    x = NULL,
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+### BMI by diabetes status
+
+```{r}
+ggplot(nhanes_model, aes(x = Diabetes, y = BMI, fill = Diabetes)) +
+  geom_boxplot(alpha = 0.9, width = 0.7, show.legend = FALSE) +
+  scale_fill_viridis_d(option = "C", end = 0.85) +
+  labs(
+    title = "BMI tends to be higher among participants with diabetes",
+    x = NULL,
+    y = "Body Mass Index"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+### Sleep patterns by diabetes status
+
+```{r}
+ggplot(nhanes_model, aes(x = SleepHrsNight, fill = Diabetes)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_fill_viridis_d(option = "B", end = 0.85) +
+  labs(
+    title = "Sleep duration distribution by diabetes status",
+    subtitle = "The bars show proportions rather than counts",
+    x = "Hours of sleep per night",
+    y = "Proportion"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+### Physical activity and diabetes
+
+```{r}
+ggplot(nhanes_model, aes(x = PhysActive, fill = Diabetes)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_fill_viridis_d(option = "E", end = 0.85) +
+  labs(
+    title = "Reported physical activity is associated with diabetes prevalence",
+    x = "Physically active",
+    y = "Proportion"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## 7. A striking multivariable view
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+This next visual is useful because it lets us inspect several numeric relationships at once. Even when we ultimately fit a predictive model, exploratory visuals help us think more clearly about structure, spread, and possible separation.
+:::
+
+```{r}
+cat("Preparing exploratory pair plot...\n")
+
+nhanes_pairs <- nhanes_model %>%
+  select(Diabetes, Age, BMI, SleepHrsNight) %>%
+  sample_n(min(800, nrow(.)))
+
+GGally::ggpairs(
+  nhanes_pairs,
+  columns = 2:4,
+  aes(color = Diabetes, alpha = 0.5),
+  upper = list(continuous = wrap("cor", size = 3)),
+  lower = list(continuous = wrap("points", size = 0.8)),
+  diag = list(continuous = wrap("densityDiag"))
+) +
+  scale_color_viridis_d(option = "D", end = 0.85) +
+  theme_minimal(base_size = 11)
+```
+
+## 8. Creating training and test sets
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Separate model training from final evaluation. This helps us assess how well our model generalises to new data.
+:::
+
+```{r}
+cat("Creating training and test sets...\n")
+
+set.seed(2026)
+
+# EDIT THIS VALUE: change the training proportion if you want to experiment
+train_prop <- 0.8
+
+train_index <- createDataPartition(nhanes_model$Diabetes, p = train_prop, list = FALSE)
+
+train_data <- nhanes_model[train_index, ]
+test_data  <- nhanes_model[-train_index, ]
+
+cat("Split complete.\n")
+cat("Training rows:", nrow(train_data), "\n")
+cat("Test rows:", nrow(test_data), "\n")
+```
+
+## 9. Baseline model: logistic regression
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Start with a classic interpretable model. Logistic regression is still one of the most useful tools in applied analytics.
+:::
+
+We will use cross-validation during training so that our comparison is more credible.
+
+```{r}
+cat("Training baseline logistic regression model...\n")
+
+set.seed(2026)
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+logit_fit <- train(
+  Diabetes ~ Age + Gender + BMI + PhysActive + Race1 + SleepHrsNight,
+  data = train_data,
+  method = "glm",
+  family = binomial(),
+  metric = "ROC",
+  trControl = ctrl
+)
+
+cat("Baseline logistic regression fitted.\n")
+logit_fit
+```
+
+## 10. Flagship predictive model: regularised regression with glmnet
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+**Why regularisation matters:** In modern predictive analytics, we often want models that are stable, efficient, and less prone to overfitting. `glmnet` helps us do that by shrinking less useful coefficients toward zero.
+:::
+
+```{r}
+cat("Training regularised glmnet model...\n")
+
+set.seed(2026)
+
+# EDIT THIS VALUE: you can increase or decrease the grid size later
+glmnet_grid <- expand.grid(
+  alpha = c(0, 0.5, 1),
+  lambda = 10^seq(-3, 0.5, length.out = 30)
+)
+
+glmnet_fit <- train(
+  Diabetes ~ Age + Gender + BMI + PhysActive + Race1 + SleepHrsNight,
+  data = train_data,
+  method = "glmnet",
+  metric = "ROC",
+  tuneGrid = glmnet_grid,
+  trControl = ctrl
+)
+
+cat("Regularised model fitted.\n")
+glmnet_fit
+```
+
+### How tuning behaved
+
+```{r}
+plot(glmnet_fit) +
+  labs(
+    title = "Cross-validated tuning profile for the regularised model"
+  )
+```
+
+## 11. Evaluating both models on unseen data
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Evaluate both models on the held-out test set. This is our most honest snapshot of predictive performance in this notebook.
+:::
+
+```{r}
+cat("Generating test-set predictions...\n")
+
+logit_prob <- predict(logit_fit, newdata = test_data, type = "prob")[, "Yes"]
+glmnet_prob <- predict(glmnet_fit, newdata = test_data, type = "prob")[, "Yes"]
+
+logit_class <- factor(ifelse(logit_prob >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
+glmnet_class <- factor(ifelse(glmnet_prob >= 0.5, "Yes", "No"), levels = c("No", "Yes"))
+
+cat("Predictions ready.\n")
+```
+
+### Confusion matrices
+
+```{r}
+cat("Evaluating baseline logistic regression...\n")
+confusionMatrix(logit_class, test_data$Diabetes, positive = "Yes")
+```
+
+```{r}
+cat("Evaluating regularised glmnet model...\n")
+confusionMatrix(glmnet_class, test_data$Diabetes, positive = "Yes")
+```
+
+### ROC-oriented summary using caret's internal results
+
+```{r}
+results_tbl <- bind_rows(
+  logit_fit$results %>%
+    mutate(Model = "Logistic regression") %>%
+    select(Model, ROC, Sens, Spec),
+  glmnet_fit$results %>%
+    mutate(Model = "Regularised glmnet") %>%
+    select(Model, alpha, lambda, ROC, Sens, Spec)
+) %>%
+  arrange(desc(ROC))
+
+head(results_tbl, 10)
+```
+
+## 12. A polished model comparison table
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+This table is designed for communication. It is not enough to fit a model; we also need to present results in a form that decision-makers can understand quickly.
+:::
+
+```{r}
+cat("Building comparison table...\n")
+
+cm_logit  <- confusionMatrix(logit_class, test_data$Diabetes, positive = "Yes")
+cm_glmnet <- confusionMatrix(glmnet_class, test_data$Diabetes, positive = "Yes")
+
+model_summary <- tibble(
+  Model = c("Logistic regression", "Regularised glmnet"),
+  Test_Accuracy = c(
+    mean(logit_class == test_data$Diabetes),
+    mean(glmnet_class == test_data$Diabetes)
+  ),
+  Test_Sensitivity = c(
+    unname(cm_logit$byClass["Sensitivity"]),
+    unname(cm_glmnet$byClass["Sensitivity"])
+  ),
+  Test_Specificity = c(
+    unname(cm_logit$byClass["Specificity"]),
+    unname(cm_glmnet$byClass["Specificity"])
+  ),
+  CV_ROC = c(
+    logit_fit$results$ROC[1],
+    max(glmnet_fit$results$ROC)
+  )
+)
+
+model_summary %>%
+  mutate(across(where(is.numeric), ~ round(as.numeric(.x), 3))) %>%
+  gt() %>%
+  tab_header(
+    title = "Model comparison on predictive performance",
+    subtitle = "Held-out test metrics combined with cross-validated ROC from training"
+  ) %>%
+  cols_label(
+    Test_Accuracy = "Test accuracy",
+    Test_Sensitivity = "Sensitivity",
+    Test_Specificity = "Specificity",
+    CV_ROC = "Cross-validated ROC"
+  ) %>%
+  fmt_number(
+    columns = c(Test_Accuracy, Test_Sensitivity, Test_Specificity, CV_ROC),
+    decimals = 3
+  ) %>%
+  data_color(
+    columns = c(Test_Accuracy, Test_Sensitivity, Test_Specificity, CV_ROC),
+    fn = scales::col_numeric(
+      palette = viridisLite::viridis(10),
+      domain = c(0, 1)
+    )
+  )
+```
+
+## 13. Which predictors matter most?
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+**Goal:** Move from prediction to interpretation. Even in predictive modelling, we still want to understand what seems to drive the outcome.
+:::
+
+For the regularised model, we can inspect variable importance.
+
+```{r}
+cat("Calculating variable importance...\n")
+
+var_imp <- varImp(glmnet_fit, scale = TRUE)
+
+var_imp$importance %>%
+  rownames_to_column("Predictor") %>%
+  arrange(desc(Overall)) %>%
+  slice_head(n = 12) %>%
+  ggplot(aes(x = reorder(Predictor, Overall), y = Overall, fill = Overall)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  scale_fill_viridis_c(option = "D", end = 0.9) +
+  labs(
+    title = "Most influential predictors in the regularised model",
+    x = NULL,
+    y = "Importance"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## 14. Plain-language interpretation
+
+::: {style="border:1px solid #c3e6cb; background:#d4edda; color:#155724; padding:16px; margin:8px 0; border-radius:4px;"}
+**What did we learn?**
+:::
+
+Our workflow suggests that:
+
+-   **BMI** and **age** are important predictors of reported diabetes status.
+-   Behavioural and demographic variables also contribute useful signal.
+-   A **regularised regression model** can match or improve on a standard logistic model while giving us a more modern predictive workflow.
+-   Even when accuracy looks strong, we should pay attention to **sensitivity** and **specificity**, especially in health contexts where missed positive cases may matter.
+
+In short, this is a good example of how statistical computing in R can move from raw records to a practical predictive insight.
+
+## 15. Assumptions, limitations, and responsible use
+
+::: {style="border:1px solid #f5c6cb; background:#f8d7da; color:#721c24; padding:16px; margin:8px 0; border-radius:4px;"}
+**Important caution:** A useful model is not automatically a fair, causal, or decision-ready model.
+:::
+
+A few responsible-use points to keep in mind:
+
+-   This is an **observational** dataset, so we cannot claim causal relationships.
+-   The target variable is **reported diabetes**, not a clinical diagnosis pipeline.
+-   Missing data were handled here by **complete-case filtering**, which is simple but not always ideal.
+-   Performance may vary across subgroups, so a fuller analysis would include **fairness and subgroup checks**.
+-   A predictive model in healthcare should support expert judgement, not replace it.
+
+## 16. Suggested next steps
+
+::: {style="border:1px solid #ffeeba; background:#fff3cd; color:#856404; padding:16px; margin:8px 0; border-radius:4px;"}
+**Try this next:** Small changes can create rich follow-up activities for teaching, labs, or assessment.
+:::
+
+Possible extensions include:
+
+1.  adding extra predictors from `NHANES`
+2.  trying a different decision threshold instead of 0.5
+3.  comparing class balance strategies
+4.  visualising calibration
+5.  fitting a more flexible classifier through `caret`
+6.  creating a short policy-style summary for a non-technical audience
+
+## 17. Take-away
+
+::: {style="border:1px solid #b8daff; background:#d9edf7; color:#0c5460; padding:16px; margin:8px 0; border-radius:4px;"}
+Congratulations — you have completed a full flagship R analytics workflow. You loaded real data, cleaned it, visualised it, trained and compared models, evaluated performance, and communicated findings with polished outputs. That is exactly the kind of end-to-end practice that makes statistical computing meaningful.
+:::
+
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20Notebook%20Footer.png)

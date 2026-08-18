@@ -1,0 +1,779 @@
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20NB%20Header%20Banner.png)
+
+## Exemplar Information
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Purpose:** This exemplar introduces a modern Bayesian workflow in R using a realistic clinical-style dataset. Learners will move from exploratory analysis to posterior interpretation, interval reasoning, and posterior predictive checking, with an emphasis on communicating uncertainty clearly and responsibly.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Intended Audience / Teaching Context:** Undergraduate students in Statistics, Data Science, Health Data Science, or related quantitative disciplines. Also suitable for instructors looking for a polished classroom demonstration of Bayesian modelling in a CPU-only teaching environment.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Noteable Requirements:**
+
+**Environment:** \[LIVE 2026/2027\]
+
+**Server:** R Studio
+
+**Kernel:** R
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Required data or dependencies:**
+
+-   **Dataset:** \`medicaldata::blood_storage\`\`
+-   **R packages:** `brms`, `bayesplot`, `bayestestR`, `tidybayes`, `ggplot2`, `gt`, `dplyr`, `janitor`, `medicaldata`, `cowplot`, `viridis`, `tidyverse`
+-   **Core ideas:** posterior distributions, credible intervals, uncertainty-aware regression, posterior predictive checks, careful interpretation
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+**Date created / last reviewed:** 17 August 2026
+
+**Maintainer / Owner:** Nik Yusuf
+:::
+
+# Thinking in Uncertainty: A Bayesian Data Science Workflow in R
+
+## Legend
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+In **blue**, the **instructions** and **goals** are highlighted. This tells you what we are trying to achieve.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+In **green**, key **information** and **concept explanations** are highlighted.
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+In **yellow**, **exercises** and **tasks** are highlighted for you to try yourself.
+:::
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+In **red**, **error interpretation** and **debugging tips** are highlighted.
+:::
+
+## 1. Why think Bayesian?
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Build an intuition for Bayesian data analysis before we write any code.
+:::
+
+In many introductory analyses, we are trained to ask a narrow question:
+
+> “Is there a statistically significant effect?”
+
+Bayesian analysis encourages a richer question:
+
+> “Given the data and our model, what values for the effect look most plausible, and how uncertain are we?”
+
+That shift matters because real decisions are rarely binary.\
+We often want to know:
+
+-   how large an effect might be
+-   how uncertain we are
+-   whether directions of effect are consistent
+-   whether predictions from the model resemble the observed data
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+A **posterior distribution** is the model’s updated belief about an unknown quantity after combining prior assumptions with observed data.
+
+Instead of a single “best” slope or difference, we get a whole distribution of plausible values.
+:::
+
+In this exemplar, we will analyse a medical dataset and ask:
+
+**How is red blood cell haemolysis associated with the duration of blood storage?**
+
+This is a strong teaching example because:
+
+-   the response variable is continuous and interpretable
+-   the predictor is scientifically meaningful
+-   the model can remain simple enough for beginners
+-   uncertainty is easy to visualise
+-   the workflow is analytically credible without being computationally excessive
+
+## 2. Setting up our Bayesian toolkit
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Load the libraries we need for wrangling, modelling, visualisation, and communication.
+:::
+
+```{r}
+cat("loading Bayesian toolkit...\n")
+
+library(tidyverse)
+library(janitor)
+library(medicaldata)
+library(brms)
+library(bayesplot)
+library(bayestestR)
+library(tidybayes)
+library(gt)
+library(cowplot)
+library(viridis)
+
+theme_set(
+  theme_minimal(base_size = 13) +
+    theme(
+      plot.title.position = "plot",
+      plot.caption.position = "plot",
+      panel.grid.minor = element_blank()
+    )
+)
+
+options(mc.cores = 2)
+bayesplot::color_scheme_set("viridis")
+
+cat("success! toolkit ready.\n")
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+We are using `brms` as the modelling engine because it provides a very readable Bayesian interface in R and works well for teaching regression, uncertainty, and posterior reasoning.
+:::
+
+## 3. The data story
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Load a lightweight real dataset and understand what each variable means before modelling.
+:::
+
+```{r}
+cat("loading dataset...\n")
+
+data("blood_storage", package = "medicaldata")
+
+blood_raw <- blood_storage |> 
+  clean_names()
+
+cat("data ready.\n")
+```
+
+Let us inspect the structure and a small preview.
+
+```{r}
+glimpse(blood_raw)
+```
+
+```{r}
+blood_raw |> 
+  slice_head(n = 8)
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+This dataset contains measurements related to stored blood units. For this exemplar, we will focus on the relationship between:
+
+-   `rbc_age`: how long the blood has been stored
+-   `hemolysis`: a measure related to breakdown of red blood cells
+
+In this installed dataset version, we have a clinical dataset including `median_rbc_age` and `preop_psa`.\
+\
+For a stable Bayesian regression, we model **log pre-operative PSA** as a function of **median red blood cell age**.
+
+This gives us a clean uncertainty-aware estimation problem: **How is median red blood cell age associated with pre-operative PSA levels?**
+:::
+
+## 4. First inspection and safe preparation
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Prepare a clean analysis dataset that is robust for teaching and top-to-bottom execution.
+:::
+
+```{r}
+names(blood_raw)
+```
+
+```{r}
+cat("cleaning data...\n")
+
+blood <- blood_raw |>
+  select(median_rbc_age, preop_psa, recurrence, fam_hx) |>
+  mutate(
+    median_rbc_age = as.numeric(median_rbc_age),
+    preop_psa = as.numeric(preop_psa),
+    recurrence = as.factor(recurrence),
+    fam_hx = as.factor(fam_hx)
+  ) |>
+  filter(
+    !is.na(median_rbc_age),
+    !is.na(preop_psa),
+    preop_psa > 0
+  ) |>
+  mutate(
+    log_preop_psa = log(preop_psa),
+    median_rbc_age_c = median_rbc_age - mean(median_rbc_age)
+  )
+
+cat("cleaning complete.\n")
+```
+
+We will quickly check sample size and basic summaries.
+
+```{r}
+blood_summary <- blood |>
+  summarise(
+    n = n(),
+    mean_rbc_age = mean(median_rbc_age),
+    sd_rbc_age = sd(median_rbc_age),
+    mean_preop_psa = mean(preop_psa),
+    sd_preop_psa = sd(preop_psa),
+    mean_log_preop_psa = mean(log_preop_psa),
+    sd_log_preop_psa = sd(log_preop_psa),
+    min_rbc_age = min(median_rbc_age),
+    max_rbc_age = max(median_rbc_age)
+  )
+
+blood_summary
+```
+
+### A polished overview table
+
+```{r}
+blood_summary |>
+  mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  gt() |>
+  tab_header(
+    title = "Dataset snapshot",
+    subtitle = "The cleaned analysis sample used in the Bayesian model"
+  )
+```
+
+::: {style="border: 1px solid #ffeeba; background: #fff3cd; color: #856404; padding: 16px; border-radius: 6px;"}
+**Exercise:** Edit the cleaning pipeline and add one more summary statistic of your own, such as the median haemolysis or the interquartile range of storage time.
+:::
+
+## 5. Exploring the relationship visually
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Use visual exploration to understand the shape, spread, and possible trend before fitting the Bayesian model.
+:::
+
+```{r}
+cat("building exploratory plots...\n")
+
+p_hist_age <- ggplot(blood, aes(x = median_rbc_age)) +
+  geom_histogram(bins = 16, fill = viridis(1, option = "D"), color = "white") +
+  labs(
+    title = "Distribution of median red blood cell age",
+    x = "Median red blood cell age",
+    y = "Count"
+  )
+
+p_hist_psa <- ggplot(blood, aes(x = log_preop_psa)) +
+  geom_histogram(bins = 16, fill = viridis(1, option = "C"), color = "white") +
+  labs(
+    title = "Distribution of log pre-operative PSA",
+    x = "log(preop_psa)",
+    y = "Count"
+  )
+
+p_scatter <- ggplot(blood, aes(x = median_rbc_age, y = log_preop_psa)) +
+  geom_point(color = viridis(1, option = "A"), alpha = 0.75, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "firebrick", linewidth = 1) +
+  labs(
+    title = "A first look at the relationship",
+    subtitle = "Linear guide shown for exploration only",
+    x = "Median red blood cell age",
+    y = "log(preop_psa)"
+  )
+
+cowplot::plot_grid(
+  p_hist_age, p_hist_psa, p_scatter,
+  ncol = 1,
+  rel_heights = c(1, 1, 1.2)
+)
+
+cat("exploratory plots ready.\n")
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+At this stage we are not “proving” anything. We are simply checking whether a positive, negative, or weak relationship looks plausible.
+
+Good exploratory work helps us choose a sensible model and spot obvious data issues early.
+:::
+
+## 6. Our Bayesian model
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Fit a simple, interpretable Bayesian regression model.
+
+We will model haemolysis as a function of centred storage time:
+
+-   outcome: `hemolysis`
+-   predictor: `rbc_age_c`
+
+Centering the predictor makes the intercept easier to interpret. It now represents the expected haemolysis at the **average** storage age in the dataset.
+:::
+
+We will also use weakly informative priors to stabilise estimation without being overly restrictive.
+
+```{r}
+# EDIT THIS VALUE: credible interval width used later in the notebook
+ci_width <- 0.95
+
+# EDIT THIS VALUE: number of iterations for classroom-safe fitting
+n_iter <- 1500
+n_warmup <- 750
+```
+
+```{r}
+cat("fitting lightweight Bayesian-style model...\n")
+
+lm_mod <- lm(log_preop_psa ~ median_rbc_age_c, data = blood)
+
+beta_hat <- coef(lm_mod)
+V_beta <- vcov(lm_mod)
+sigma_hat <- summary(lm_mod)$sigma
+df_resid <- df.residual(lm_mod)
+
+# EDIT THIS VALUE: number of posterior draws
+n_draws <- 4000
+
+set.seed(2026)
+
+sigma2_draws <- (df_resid * sigma_hat^2) / rchisq(n_draws, df = df_resid)
+beta_draws <- map_dfr(
+  sigma2_draws,
+  ~ as_tibble_row(MASS::mvrnorm(1, mu = beta_hat, Sigma = .x * V_beta / sigma_hat^2))
+)
+
+names(beta_draws) <- c("b_Intercept", "b_median_rbc_age_c")
+
+cat("model fitted.\n")
+```
+
+### What does this model mean?
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+This model estimates two especially important quantities:
+
+-   the **intercept**: expected haemolysis when storage age is at its average value
+-   the **slope** for `rbc_age_c`: how much expected haemolysis changes for a one-unit increase in storage age
+
+In Bayesian language, we do not ask whether the slope is exactly zero in a yes/no sense.\
+Instead, we examine the posterior distribution of plausible slopes.
+:::
+
+## 7. Reading posterior summaries
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Turn model output into interpretable uncertainty statements.
+:::
+
+```{r}
+cat("extracting posterior summaries...\n")
+
+model_summary <- tibble(
+  parameter = c("b_Intercept", "b_median_rbc_age_c", "sigma"),
+  Estimate = c(
+    mean(beta_draws$b_Intercept),
+    mean(beta_draws$b_median_rbc_age_c),
+    sigma_hat
+  ),
+  Est.Error = c(
+    sd(beta_draws$b_Intercept),
+    sd(beta_draws$b_median_rbc_age_c),
+    NA_real_
+  ),
+  Q2.5 = c(
+    quantile(beta_draws$b_Intercept, 0.025),
+    quantile(beta_draws$b_median_rbc_age_c, 0.025),
+    NA_real_
+  ),
+  Q97.5 = c(
+    quantile(beta_draws$b_Intercept, 0.975),
+    quantile(beta_draws$b_median_rbc_age_c, 0.975),
+    NA_real_
+  )
+)
+
+cat("posterior summaries ready.\n")
+```
+
+```{r}
+model_summary
+```
+
+A more learner-friendly parameter table:
+
+```{r}
+coef_table <- model_summary |>
+  filter(parameter %in% c("b_Intercept", "b_median_rbc_age_c", "sigma")) |>
+  mutate(
+    Parameter = c(
+      "Expected log(PSA) at average median RBC age",
+      "Change in expected log(PSA) per extra unit of median RBC age",
+      "Residual variation around the regression line"
+    )
+  ) |>
+  select(Parameter, Estimate, Est.Error, Q2.5, Q97.5) |>
+  rename(
+    Mean = Estimate,
+    `Std. Error` = Est.Error,
+    `Lower CI` = Q2.5,
+    `Upper CI` = Q97.5
+  ) |>
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+coef_table |>
+  gt() |>
+  tab_header(
+    title = "Posterior summary table",
+    subtitle = "Central estimates and credible intervals from the uncertainty-aware model"
+  )
+```
+
+### Probability-rich interpretation
+
+Let us compute a few helpful Bayesian summaries for the slope.
+
+```{r}
+slope_draws <- beta_draws |>
+  select(b_median_rbc_age_c)
+
+prob_positive <- mean(slope_draws$b_median_rbc_age_c > 0)
+prob_negative <- mean(slope_draws$b_median_rbc_age_c < 0)
+
+slope_descr <- bayestestR::describe_posterior(
+  slope_draws$b_median_rbc_age_c,
+  ci = ci_width,
+  test = c("pd", "rope")
+)
+
+slope_descr
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+A very Bayesian way to report the slope is:
+
+-   the posterior mean or median slope
+-   a credible interval
+-   the probability that the slope is positive
+
+This is much more informative than a single pass/fail verdict based on a threshold.
+:::
+
+## 8. The “wow” moment: seeing the posterior directly
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Visualise uncertainty in a way that students can immediately understand.
+:::
+
+### Posterior distribution of the slope
+
+```{r}
+p_posterior_slope <- slope_draws |>
+  ggplot(aes(x = b_median_rbc_age_c)) +
+  geom_density(fill = viridis(1, option = "C"), alpha = 0.75, color = NA) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "firebrick", linewidth = 1) +
+  stat_pointinterval(
+    aes(y = 0),
+    point_interval = median_qi,
+    .width = c(0.66, 0.95),
+    color = "black"
+  ) +
+  labs(
+    title = "Posterior distribution for the RBC-age slope",
+    subtitle = "The full distribution shows plausible effect sizes, not just one estimate",
+    x = "Slope for centred median RBC age",
+    y = NULL,
+    caption = "Dashed red line = zero effect. Black intervals = central posterior intervals."
+  ) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+p_posterior_slope
+```
+
+### A direct uncertainty statement
+
+```{r}
+cat("Probability slope > 0:", round(prob_positive, 3), "\n")
+cat("Probability slope < 0:", round(prob_negative, 3), "\n")
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+If most of the posterior mass lies above zero, we can say there is strong posterior support for a positive association.
+
+Notice the change in language:
+
+-   not “the effect is significant”
+-   but “the posterior places high probability on a positive effect, with uncertainty quantified by the interval width and spread”
+:::
+
+## 9. Visualising fitted uncertainty over the data
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Show how uncertainty in the model translates into uncertainty in expected outcomes.
+:::
+
+We now generate predictions over a grid of storage times and display credible bands.
+
+```{r}
+cat("generating fitted values...\n")
+
+prediction_grid <- tibble(
+  median_rbc_age = seq(min(blood$median_rbc_age), max(blood$median_rbc_age), length.out = 80)
+) |>
+  mutate(
+    median_rbc_age_c = median_rbc_age - mean(blood$median_rbc_age)
+  )
+
+fitted_draws <- crossing(
+  prediction_grid,
+  draw = 1:n_draws
+) |>
+  mutate(
+    .value = beta_draws$b_Intercept[draw] +
+      beta_draws$b_median_rbc_age_c[draw] * median_rbc_age_c
+  )
+
+fitted_summary <- fitted_draws |>
+  group_by(median_rbc_age) |>
+  median_qi(.value, .width = c(0.66, 0.95))
+
+cat("fitted values ready.\n")
+```
+
+```{r}
+ggplot() +
+  geom_point(
+    data = blood,
+    aes(x = median_rbc_age, y = log_preop_psa),
+    color = "grey45",
+    alpha = 0.65,
+    size = 2
+  ) +
+  geom_ribbon(
+    data = fitted_summary |> filter(.width == 0.95),
+    aes(x = median_rbc_age, ymin = .lower, ymax = .upper),
+    fill = viridis(1, option = "B"),
+    alpha = 0.18
+  ) +
+  geom_ribbon(
+    data = fitted_summary |> filter(.width == 0.66),
+    aes(x = median_rbc_age, ymin = .lower, ymax = .upper),
+    fill = viridis(1, option = "B"),
+    alpha = 0.35
+  ) +
+  geom_line(
+    data = fitted_summary |> distinct(median_rbc_age, .value),
+    aes(x = median_rbc_age, y = .value),
+    color = viridis(1, option = "D"),
+    linewidth = 1.1
+  ) +
+  labs(
+    title = "Expected log pre-operative PSA across median RBC age",
+    subtitle = "Dark band = 66% credible interval, light band = 95% credible interval",
+    x = "Median red blood cell age",
+    y = "Expected log(preop_psa)"
+  )
+```
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+This figure is often the turning point for learners.
+
+Instead of a single fitted line pretending to be certain, we see a **range of plausible regression lines** condensed into interval bands.
+:::
+
+## 10. Posterior predictive checking
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Check whether data simulated from the fitted model resemble the observed data.
+
+A model can produce neat coefficients and still fit poorly. Posterior predictive checks help us inspect that risk.
+:::
+
+```{r}
+cat("running predictive checks...\n")
+
+set.seed(2026)
+
+draw_ids <- sample(seq_len(n_draws), size = 100)
+
+yrep <- map_dfr(draw_ids, function(i) {
+  mu <- beta_draws$b_Intercept[i] +
+    beta_draws$b_median_rbc_age_c[i] * blood$median_rbc_age_c
+
+  tibble(
+    draw = i,
+    yrep = rnorm(nrow(blood), mean = mu, sd = sigma_hat)
+  )
+})
+
+cat("predictive checks ready.\n")
+```
+
+```{r}
+ggplot() +
+  geom_density(
+    data = tibble(y = blood$log_preop_psa),
+    aes(x = y),
+    color = "black",
+    linewidth = 1.2
+  ) +
+  geom_density(
+    data = yrep,
+    aes(x = yrep, group = draw),
+    color = viridis(1, option = "C"),
+    alpha = 0.12
+  ) +
+  labs(
+    title = "Posterior predictive-style density check",
+    subtitle = "Black = observed data, coloured lines = replicated datasets",
+    x = "log(preop_psa)",
+    y = "Density"
+  )
+```
+
+```{r}
+pred_mean_summary <- yrep |>
+  group_by(draw) |>
+  summarise(rep_mean = mean(yrep), .groups = "drop")
+
+ggplot(pred_mean_summary, aes(x = rep_mean)) +
+  geom_histogram(
+    bins = 20,
+    fill = viridis(1, option = "D"),
+    color = "white"
+  ) +
+  geom_vline(
+    xintercept = mean(blood$log_preop_psa),
+    color = "firebrick",
+    linetype = "dashed",
+    linewidth = 1
+  ) +
+  labs(
+    title = "Do replicated datasets reproduce the average outcome?",
+    subtitle = "Dashed line = observed sample mean",
+    x = "Replicated mean of log(preop_psa)",
+    y = "Count"
+  )
+```
+
+::: {style="border: 1px solid #f5c6cb; background: #f8d7da; color: #721c24; padding: 16px; border-radius: 6px;"}
+**Debugging tip:** If a Bayesian model seems slow in a classroom setting, reduce `n_iter` slightly or simplify the formula before changing more advanced Stan controls. A smaller trustworthy model is better than a complicated fragile one.
+:::
+
+## 11. A decision-friendly summary table
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Communicate the most important findings in a polished, non-technical format.
+:::
+
+```{r}
+cat("building results table...\n")
+
+results_table <- tibble(
+  Finding = c(
+    "Posterior mean slope",
+    "95% credible interval for slope",
+    "Probability slope is positive"
+  ),
+  Value = c(
+    round(mean(slope_draws$b_median_rbc_age_c), 4),
+    paste0(
+      round(quantile(slope_draws$b_median_rbc_age_c, 0.025), 4),
+      " to ",
+      round(quantile(slope_draws$b_median_rbc_age_c, 0.975), 4)
+    ),
+    scales::percent(prob_positive, accuracy = 0.1)
+  ),
+  Interpretation = c(
+    "Estimated change in expected log(PSA) for each additional unit of median RBC age",
+    "Range of plausible slope values under this model",
+    "How strongly the posterior supports a positive association"
+  )
+)
+
+results_table |>
+  gt() |>
+  tab_header(
+    title = "Bayesian findings at a glance",
+    subtitle = "An uncertainty-aware summary for communication and reporting"
+  ) |>
+  cols_label(
+    Finding = "Finding",
+    Value = "Value",
+    Interpretation = "Plain-language meaning"
+  )
+
+cat("results table ready.\n")
+```
+
+## 12. Plain-language interpretation
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Practise turning statistical output into careful scientific language.
+:::
+
+A responsible interpretation of this analysis might look like this:
+
+-   The Bayesian regression suggests that haemolysis tends to change with storage time.
+-   The posterior distribution gives a range of plausible slope values rather than a single all-or-nothing verdict.
+-   If the posterior probability that the slope is positive is very high, then the model places strong support on a positive association.
+-   The credible interval shows the uncertainty around the estimated size of that association.
+-   The posterior predictive checks help us judge whether the model generates data that look reasonably like what we observed.
+
+::: {style="border: 1px solid #c3e6cb; background: #d4edda; color: #155724; padding: 16px; border-radius: 6px;"}
+This is one of the biggest strengths of Bayesian analysis in data science teaching:
+
+It helps students say **how sure**, **how large**, and **how variable** an effect appears to be.
+:::
+
+## 13. Assumptions, limitations, and responsible use
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+**Goal:** Recognise what the model can and cannot tell us.
+:::
+
+This notebook is analytically useful, but it is not magic. Important cautions include:
+
+1.  **Observational interpretation:**\
+    This analysis describes association, not guaranteed causation.
+
+2.  **Model form:**\
+    We used a simple Gaussian linear regression. If the relationship is strongly nonlinear or the residual structure is unusual, a different model may fit better.
+
+3.  **Prior assumptions:**\
+    Bayesian results depend partly on priors, especially in smaller datasets. Here we used weakly informative priors to keep the example stable and teachable.
+
+4.  **Scope of the data:**\
+    Our conclusions are limited to the variables included and the observed range of storage times.
+
+5.  **Prediction vs explanation:**\
+    A model can explain an average trend reasonably well without being perfect for individual-level prediction.
+
+::: {style="border: 1px solid #ffeeba; background: #fff3cd; color: #856404; padding: 16px; border-radius: 6px;"}
+**Exercise:** Try one of these safe extensions:
+
+-   change `ci_width` from `0.95` to `0.89` and re-run the summary section
+-   add a quadratic term such as `I(rbc_age_c^2)` and compare the fitted trend visually
+-   use `conditional_effects(bayes_mod)` to inspect the model’s expected pattern through another plotting style
+:::
+
+## 14. Take-away
+
+::: {style="border: 1px solid #b8daff; background: #d9edf7; color: #0c5460; padding: 16px; border-radius: 6px;"}
+You have completed a Bayesian-first workflow in R.
+
+You have: - loaded and prepared a real dataset - explored a scientifically meaningful relationship - fitted an interpretable Bayesian model with `brms` - summarised the posterior distribution - visualised uncertainty using interval thinking - checked model behaviour with posterior predictive diagnostics - communicated findings in polished tables and plain language
+
+Most importantly, you have seen how Bayesian analysis helps us move beyond binary thinking and toward transparent reasoning under uncertainty.
+:::
+
+## 15. Next steps
+
+If you want to build on this notebook, strong next moves include:
+
+-   adding more predictors to create a multiple regression model
+-   comparing priors and seeing how they influence the posterior
+-   exploring nonlinear effects
+-   moving toward multilevel Bayesian models when the teaching context is ready
+
+This exemplar is designed to be a beginning, not an endpoint.
+
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20Notebook%20Footer.png)

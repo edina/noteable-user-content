@@ -1,0 +1,621 @@
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20NB%20Header%20Banner.png)
+
+## Exemplar Information
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Purpose:** This exemplar is a showcase-quality RStudio notebook that introduces text analytics through a visually striking co-occurrence network built from Jane Austen novels. It demonstrates how to move from raw text to interpretable structure using a lightweight, classroom-practical workflow.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Intended Audience / Teaching Context:** Undergraduate students, instructors, and workshop leaders who want a memorable introduction to tokenisation, word frequencies, contextual co-occurrence, and network-based interpretation in R.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Noteable Requirements:**
+
+**Environment:** \[LIVE 2026/2027\]
+
+**Server:** R Studio
+
+**Kernel:** R
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Required data or dependencies:**
+
+-   Package dataset from `janeaustenr`
+-   R packages: `janeaustenr`, `quanteda`, `igraph`, `ggraph`, `tidygraph`, `ggplot2`, `dplyr`, `tidyr`, `stringr`, `forcats`, `ggrepel`, `viridis`, `gt`
+-   Base R functions for lightweight preparation and summaries
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+**Date created / last reviewed:** 17 August 2026
+
+**Maintainer / Owner:** Nik Yusuf
+:::
+
+# An Interactive Introduction to Text Networks in R
+
+## Legend
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+In **blue**, the **instructions** and **goals** are highlighted. This tells you what we are trying to achieve.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+In **green**, key **information** and **concept explanations** are highlighted.
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+In **yellow**, **exercises** and **tasks** are highlighted for you to try yourself.
+:::
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+In **red**, **error interpretation** and **debugging tips** are highlighted.
+:::
+
+## 1. Why this notebook?
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Build a modern text analytics story that goes beyond simple word counts. We will turn a classic novel corpus into a network of meaningful word relationships, then use that network to ask an interpretable question: **which themes travel together, and how do they differ across novels?**
+:::
+
+Text analysis is one of the clearest examples of how data science can make unstructured material computationally useful. Instead of rows of numbers, we begin with words. By the end, we will have:
+
+-   a clean corpus
+-   frequency summaries
+-   a comparison across novels
+-   a co-occurrence network
+-   a polished results table
+-   a visually memorable graph that highlights thematic communities
+
+This is a strong flagship workflow because it is:
+
+-   visually distinctive
+-   methodologically respectable
+-   lightweight enough for classroom use
+-   very different from a generic regression notebook
+
+## 2. Setting up our toolkit
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Load the libraries we need. Each package plays a clear role: text handling, wrangling, plotting, networks, or presentation.
+:::
+
+```{r}
+cat("Loading packages...\n")
+
+library(janeaustenr)
+library(quanteda)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(forcats)
+library(ggrepel)
+library(viridis)
+library(gt)
+
+cat("Success! Packages loaded.\n")
+```
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**What is `quanteda`?** It is a text analysis package that helps us build corpora, tokens, document-feature matrices, and contextual statistics efficiently.
+
+**What is a co-occurrence network?** It is a graph where words become nodes, and links show which words tend to appear near one another in the text.
+:::
+
+## 3. Loading the text data
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Bring in a reliable, built-in dataset that works without downloads or authentication.
+:::
+
+The `janeaustenr` package includes the full texts of Jane Austen's major novels in a tidy format. That makes it ideal for teaching: it is lightweight, famous enough to be interesting, and already structured.
+
+```{r}
+cat("Loading Austen text data...\n")
+
+austen_raw <- janeaustenr::austen_books()
+
+cat("Data ready.\n")
+dplyr::glimpse(austen_raw)
+```
+
+A quick preview:
+
+```{r}
+head(austen_raw, 10)
+```
+
+## 4. First inspection: what does the dataset look like?
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+Each row contains one line of text and the novel it came from. That means we need to do a little preparation before we can study vocabulary or build a network.
+:::
+
+Let's check the number of lines in each novel.
+
+```{r}
+book_sizes <- austen_raw %>%
+  count(book, name = "lines") %>%
+  arrange(desc(lines))
+
+book_sizes
+```
+
+```{r}
+ggplot(book_sizes, aes(x = fct_reorder(book, lines), y = lines, fill = lines)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  scale_fill_viridis_c(option = "C") +
+  labs(
+    title = "Austen novels vary noticeably in length",
+    subtitle = "Longer books naturally contribute more text, so normalisation matters later",
+    x = NULL,
+    y = "Number of text lines"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+**Try it yourself:** Change the sorting in the table above from descending to ascending. It is a small edit, but it helps build confidence with dplyr pipelines.
+:::
+
+## 5. Preparing the corpus
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Convert the raw lines into analysis-ready text, then create chapter-level documents. Chapters give us natural local contexts for comparing vocabulary and building co-occurrence patterns.
+:::
+
+A useful text analysis principle is this:
+
+-   whole books are often too broad
+-   single lines are often too small
+-   chapters are a practical middle ground
+
+We will detect chapter headings using a regular expression and then combine lines within each chapter.
+
+```{r}
+cat("Preparing chapter-level corpus...\n")
+
+austen_prepared <- austen_raw %>%
+  group_by(book) %>%
+  mutate(
+    line_number = row_number(),
+    is_chapter = str_detect(text, regex("^chapter\\s+[0-9ivxlc]+", ignore_case = TRUE)),
+    chapter = cumsum(is_chapter)
+  ) %>%
+  ungroup() %>%
+  filter(chapter > 0) %>%
+  group_by(book, chapter) %>%
+  summarise(
+    text = paste(text, collapse = " "),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    doc_id = paste(book, chapter, sep = "_chapter_")
+  )
+
+cat("Cleaning complete.\n")
+head(austen_prepared, 8)
+```
+
+Now we build a quanteda corpus and tokenise the text.
+
+```{r}
+cat("Tokenising text...\n")
+
+austen_corpus <- corpus(austen_prepared, text_field = "text")
+docvars(austen_corpus, "book") <- austen_prepared$book
+docvars(austen_corpus, "chapter") <- austen_prepared$chapter
+
+austen_tokens <- tokens(
+  austen_corpus,
+  remove_punct = TRUE,
+  remove_symbols = TRUE,
+  remove_numbers = TRUE,
+  remove_url = TRUE
+) %>%
+  tokens_tolower() %>%
+  tokens_remove(pattern = stopwords("en")) %>%
+  tokens_remove(pattern = c(
+    "mr", "mrs", "miss", "lady", "sir", "colonel",
+    "captain", "could", "would", "should", "may",
+    "must", "one", "every", "much", "well", "said"
+  ))
+
+cat("Tokens ready.\n")
+austen_tokens
+```
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**Why remove stopwords?** Words like “the”, “and”, and “of” are important in language, but they are usually too common to be analytically helpful in a first-pass thematic exploration.
+
+**Why remove a few title words too?** In novels, social titles such as “mr” and “mrs” can dominate counts without telling us much about themes.
+:::
+
+## 6. Exploratory analysis: which words dominate the corpus?
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Start with a familiar summary: the most frequent content words in the corpus.
+:::
+
+```{r}
+cat("Building document-feature matrix...\n")
+
+austen_dfm <- dfm(austen_tokens)
+
+term_frequencies <- colSums(austen_dfm)
+term_frequencies <- data.frame(
+  feature = names(term_frequencies),
+  frequency = as.numeric(term_frequencies)
+) %>%
+  arrange(desc(frequency)) %>%
+  slice_head(n = 20) %>%
+  mutate(rank = row_number())
+
+cat("Exploration ready.\n")
+term_frequencies
+```
+
+```{r}
+ggplot(term_frequencies, aes(x = frequency, y = fct_reorder(feature, frequency), fill = rank)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_viridis_c(option = "D", direction = -1) +
+  labs(
+    title = "The most common content words across the corpus",
+    subtitle = "These words begin to hint at the emotional and social world of Austen's novels",
+    x = "Frequency",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+This is useful, but also limited. Frequency tells us what is common, not what hangs together.
+
+That is why the next step matters.
+
+## 7. Comparing novels with relative word usage
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Compare books rather than just the overall corpus. This helps us see whether different novels emphasise different vocabularies.
+:::
+
+We will group all chapters by novel, construct one document per book, and compute relative frequencies per 1,000 tokens.
+
+```{r}
+cat("Computing novel-level comparison...\n")
+
+book_dfm <- dfm_group(austen_dfm, groups = docvars(austen_dfm, "book"))
+
+book_freq <- as.matrix(book_dfm) %>%
+  as.data.frame()
+
+book_freq$.document_id <- rownames(book_freq)
+
+book_freq <- book_freq %>%
+  select(.document_id, everything())
+
+book_freq_long <- book_freq %>%
+  pivot_longer(-.document_id, names_to = "word", values_to = "count") %>%
+  group_by(.document_id) %>%
+  mutate(
+    total_tokens = sum(count),
+    per_1000 = 1000 * count / total_tokens
+  ) %>%
+  ungroup()
+
+top_words_by_book <- book_freq_long %>%
+  filter(count > 0) %>%
+  group_by(.document_id) %>%
+  slice_max(order_by = per_1000, n = 6, with_ties = FALSE) %>%
+  ungroup()
+
+cat("Comparison ready.\n")
+top_words_by_book
+
+```
+
+```{r}
+ggplot(top_words_by_book, aes(x = per_1000, y = fct_reorder(word, per_1000), fill = .document_id)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ .document_id, scales = "free_y") +
+  scale_fill_viridis_d(option = "C") +
+  labs(
+    title = "Each novel has its own lexical signature",
+    subtitle = "Relative frequency helps us compare books of different lengths more fairly",
+    x = "Occurrences per 1,000 tokens",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+This is an important methodological improvement. We are no longer letting longer novels dominate simply because they contain more words.
+:::
+
+## 8. The key analytical move: build a co-occurrence network
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Move from counts to relationships. We will connect words that appear near each other within a short window. That gives us a network of contextual association.
+:::
+
+This is where the notebook becomes especially memorable. A network can reveal clusters such as:
+
+-   emotion words
+-   family and social roles
+-   movement and travel
+-   judgement and conversation
+
+To keep the network readable and robust, we will:
+
+1.  keep only reasonably frequent words
+2.  use a short context window
+3.  retain stronger co-occurrence links
+4.  size nodes by frequency
+5.  colour communities automatically
+
+```{r}
+# EDIT THIS VALUE: increase if you want a denser network, decrease for a cleaner one
+min_term_count <- 40
+
+# EDIT THIS VALUE: context window for co-occurrence
+window_size <- 6
+
+cat("Constructing feature co-occurrence matrix...\n")
+
+dfm_trimmed <- dfm_trim(austen_dfm, min_termfreq = min_term_count)
+
+fcm_mat <- fcm(
+  austen_tokens,
+  context = "window",
+  tri = FALSE,
+  count = "frequency",
+  window = window_size
+)
+
+feature_names <- featnames(dfm_trimmed)
+fcm_trimmed <- fcm_select(fcm_mat, pattern = feature_names, selection = "keep")
+
+fcm_matrix <- as.matrix(fcm_trimmed)
+
+edge_df <- as.data.frame(as.table(fcm_matrix), stringsAsFactors = FALSE)
+
+# Standardise names by position for maximum compatibility
+colnames(edge_df)[1:3] <- c("from", "to", "frequency")
+
+edge_df <- edge_df %>%
+  filter(from != to, frequency >= 25) %>%
+  mutate(
+    node_min = ifelse(from < to, from, to),
+    node_max = ifelse(from < to, to, from)
+  ) %>%
+  group_by(node_min, node_max) %>%
+  summarise(
+    frequency = sum(as.numeric(frequency)),
+    .groups = "drop"
+  ) %>%
+  rename(from = node_min, to = node_max)
+
+node_freq_vec <- colSums(dfm_trimmed)
+node_freq <- data.frame(
+  feature = names(node_freq_vec),
+  frequency = as.numeric(node_freq_vec)
+)
+
+cat("Network data ready.\n")
+head(edge_df)
+```
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+**Debugging tip:** If your network looks too crowded, raise `min_term_count` or the edge threshold in the `filter()` step. If it looks too sparse, reduce those values slightly.
+:::
+
+## 9. Turning co-occurrence into a graph object
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Convert the co-occurrence table into a graph we can measure and visualise.
+:::
+
+```{r}
+cat("Building graph object...\n")
+
+graph_tbl <- tbl_graph(
+  nodes = tibble(name = node_freq$feature, frequency = node_freq$frequency),
+  edges = edge_df %>% rename(weight = frequency),
+  directed = FALSE
+) %>%
+  activate(nodes) %>%
+  mutate(
+    degree = centrality_degree(),
+    community = as.factor(group_louvain())
+  )
+
+cat("Graph built.\n")
+graph_tbl
+```
+
+We can also calculate a small centrality summary before plotting.
+
+```{r}
+centrality_table <- graph_tbl %>%
+  activate(nodes) %>%
+  as_tibble() %>%
+  select(name, frequency, degree, community) %>%
+  arrange(desc(degree), desc(frequency)) %>%
+  slice_head(n = 12)
+
+centrality_table
+```
+
+## 10. Showpiece visual: a thematic word network
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Create the flagship visual. This graph is designed to be both beautiful and interpretable: larger nodes are more common words, thicker edges show stronger co-occurrence, and colours suggest word communities.
+:::
+
+```{r fig.width=11, fig.height=8}
+cat("Rendering flagship network visual...\n")
+
+set.seed(2026)
+
+ggraph(graph_tbl, layout = "fr") +
+  geom_edge_link(aes(width = weight), alpha = 0.12, colour = "grey40", show.legend = FALSE) +
+  geom_node_point(aes(size = frequency, colour = community), alpha = 0.95, show.legend = FALSE) +
+  geom_node_text(
+    aes(label = name, colour = community),
+    size = 3.6,
+    repel = TRUE,
+    point.padding = unit(0.15, "lines"),
+    show.legend = FALSE
+  ) +
+  scale_size(range = c(2.5, 10)) +
+  scale_edge_width(range = c(0.2, 2.2)) +
+  scale_colour_viridis_d(option = "D") +
+  labs(
+    title = "Austen's vocabulary forms thematic communities",
+    subtitle = "Words are linked when they frequently appear near one another across chapters",
+    caption = "Network built from chapter-level text using a short context window and frequency trimming"
+  ) +
+  theme_graph(base_family = "sans")
+```
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+**What makes this a real analytical result?** The graph is not decorative. It encodes structure:
+
+-   **node size** shows how common a word is
+-   **edge thickness** shows how strongly two words co-occur
+-   **community colour** shows groups found by a clustering algorithm
+
+This gives us a principled way to move from text to interpretable patterns.
+:::
+
+## 11. Interpreting the network responsibly
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+A network invites interpretation, but we should stay careful. A link does **not** prove meaning in the literary sense. It shows repeated local association in the corpus.
+:::
+
+Here are some good questions to ask while reading the graph:
+
+-   Which words sit near the centre and connect multiple themes?
+-   Which communities look emotionally oriented?
+-   Which communities look social or domestic?
+-   Are there words that seem to bridge conversation, family, and judgement?
+
+A useful pattern in literary networks is the difference between:
+
+-   **high-frequency words**, which are common
+-   **high-degree words**, which connect broadly across themes
+
+These are related, but not always identical.
+
+## 12. A polished results table
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** Present the most connected words in a polished format using `gt`. This creates a tidy, instructor-friendly summary panel.
+:::
+
+```{r}
+cat("Preparing summary table...\n")
+
+centrality_gt <- centrality_table %>%
+  mutate(
+    frequency = format(frequency, big.mark = ","),
+    degree = format(degree, big.mark = ",")
+  ) %>%
+  gt() %>%
+  tab_header(
+    title = "Most Connected Words in the Austen Co-occurrence Network",
+    subtitle = "Degree centrality highlights words that connect to many others"
+  ) %>%
+  cols_label(
+    name = "Word",
+    frequency = "Token frequency",
+    degree = "Degree",
+    community = "Community"
+  ) %>%
+  tab_options(
+    table.font.size = px(13),
+    heading.align = "left"
+  )
+
+cat("Summary outputs prepared.\n")
+centrality_gt
+```
+
+## 13. A focused comparison: emotion and judgement words by novel
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+**Goal:** End with one more interpretable comparison. We will track a small set of theme-relevant words across novels using relative frequencies.
+:::
+
+```{r}
+focus_words <- c("love", "happy", "dear", "friend", "feel", "mind")
+
+focus_comparison <- book_freq_long %>%
+  filter(word %in% focus_words) %>%
+  mutate(word = factor(word, levels = focus_words))
+
+focus_comparison
+```
+
+```{r}
+ggplot(focus_comparison, aes(x = .document_id, y = per_1000, fill = word)) +
+  geom_col(position = "dodge") +
+  scale_fill_viridis_d(option = "B") +
+  labs(
+    title = "Selected emotion and judgement words vary across novels",
+    subtitle = "A simple relative-frequency comparison supports the broader network story",
+    x = NULL,
+    y = "Occurrences per 1,000 tokens",
+    fill = "Word"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+This final comparison helps connect the elegant network picture back to a simple measurable summary.
+
+## 14. Limitations and good analytical habits
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+**Important:** Text analysis can be persuasive, so it is important to communicate limits clearly.
+:::
+
+Some sensible cautions:
+
+1.  **A co-occurrence link is not the same as causal meaning.** It shows repeated proximity, not intent.
+2.  **Pre-processing choices matter.** Removing stopwords, trimming low-frequency terms, and choosing a window size all shape the result.
+3.  **Classic literature reflects historical language and social norms.** Interpretation should stay context-aware.
+4.  **Different document units may change the patterns.** We used chapters; paragraphs or scenes might reveal different structures.
+5.  **Network communities are algorithmic groupings.** They are useful summaries, but not the only valid reading.
+
+## 15. Try-it-yourself extensions
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+**Exercises:** 1. Change `min_term_count` to 30 or 50 and compare the network. 2. Increase `window_size` from 6 to 10. Does the graph become more diffuse? 3. Remove one novel and rebuild the network. Which themes remain strongest? 4. Replace the focus word set with your own small thematic list. 5. Group documents differently if you want to experiment with a new modelling choice.
+:::
+
+## Take-away
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+You have built a complete text analytics pipeline in RStudio:
+
+-   loaded a real corpus
+-   cleaned and tokenised text
+-   compared vocabulary across novels
+-   built a principled co-occurrence network
+-   interpreted centrality and communities
+-   presented results with both polished plots and a formatted table
+
+Most importantly, you have seen how text can become **structured, analysable data** without losing the excitement of the original material.
+:::
+
+This exemplar is a strong reminder that modern data science is not only about prediction. It is also about finding shape, context, and interpretable structure in rich human data.
+
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20Notebook%20Footer.png)
