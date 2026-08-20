@@ -1,0 +1,53 @@
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20NB%20Header%20Banner.png)
+
+## Exemplar Information
+
+| [**Purpose:** This notebook is a reusable exemplar template designed to help staff create clear, engaging, and pedagogically useful Jupyter/Noteable notebooks for teaching, learning, demonstration, or assessment support.]{style="color: blue;"} |
+|------------------------------------------------------------------------|
+
+| [**Intended Audience / Teaching Context:** Staff and teaching teams who want to design their own notebook exemplars for students, colleagues, workshops, courses, labs, revision materials, or self-paced learning activities.]{style="color: green;"} |
+|------------------------------------------------------------------------|
+
+| [**Noteable Requirements:**]{style="color: green;"} |
+|------------------------------------------------------------------------|
+| [**Environment:** \[LIVE/BETA/DEV 2026/2027\]]{style="color: green;"} |
+| [**Server:** \[Standard Python 3 / Language and Machine Learning / BioChemistry / GeoScience / Astronomy / R Studio / R with Stan\]]{style="color: green;"} |
+| [**Kernel:** \[Python 3 / R\]]{style="color: green;"} |
+
+| [**Noteable Requirements:**]{style="color: green;"} |
+|------------------------------------------------------------------------|
+| [**Environment:** \[LIVE/BETA/DEV 2026/2027\]]{style="color: green;"} |
+| [**Server:** \[Standard Python 3 / Language and Machine Learning / BioChemistry / GeoScience / Astronomy / R Studio / R with Stan\]]{style="color: green;"} |
+| [**Kernel:** \[Python 3 / R\]]{style="color: green;"} |
+
+| [**Required data or dependencies:**]{style="color: green;"} |
+|------------------------------------------------------------------------|
+| [- \[e.g. Embedded fictional review dataset included directly in the notebook\]]{style="color: green;"} |
+| [- Python packages: \[e.g. `pandas`, `matplotlib`, `plotly`, `ipywidgets`, `textblob`, `wordcloud`, `IPython`\]]{style="color: green;"} |
+| [- Standard library modules: \[e.g. `re`, `string`, `warnings`, `collections`\]]{style="color: green;"} |
+
+| [**Date created / last reviewed:** \[dd Month yyyy\]]{style="color: orange;"} |
+|------------------------------------------------------------------------|
+| [**Maintainer / Owner:** \[Full Name\]]{style="color: orange;"} |
+
+# \[TITLE\]
+
+## Legend
+
+::: {style="border: 2px solid blue; padding: 10px; color: blue; border-radius: 6px;"}
+In **blue**, the **instructions** and **goals** are highlighted. This tells you what we are trying to achieve.
+:::
+
+::: {style="border: 2px solid green; padding: 10px; color: green; border-radius: 6px;"}
+In **green**, key **information** and **concept explanations** are highlighted.
+:::
+
+::: {style="border: 2px solid orange; padding: 10px; color: orange; border-radius: 6px;"}
+In **yellow**, **exercises** and **tasks** are highlighted for you to try yourself.
+:::
+
+::: {style="border: 2px solid red; padding: 10px; color: red; border-radius: 6px;"}
+In **red**, **error interpretation** and **debugging tips** are highlighted.
+:::
+
+![](https://raw.githubusercontent.com/YusufNik/Noteable/refs/heads/main/images/Noteable%20Notebook%20Footer.png)
